@@ -1,0 +1,15 @@
+[[columns]]
+name = "t0"
+cardinality = 100
+base = "first-"
+
+[[columns]]
+name = "t1"
+cardinality = 10000
+base = "second-"
+
+[[columns]]
+name = "t2"
+bloom_filter = { fpp = 0.1, ndv = 100000 }
+cardinality = 1000000
+base = "third-"
