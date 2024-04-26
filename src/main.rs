@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     fs::File,
     io::{Read, Write},
     path::PathBuf,
@@ -167,10 +166,10 @@ impl From<Vec<Rc<str>>> for Row {
     }
 }
 
-impl From<VecDeque<Rc<str>>> for Row {
-    fn from(vd: VecDeque<Rc<str>>) -> Self {
+impl From<Rc<str>> for Row {
+    fn from(value: Rc<str>) -> Self {
         Self {
-            cols: Vec::from(vd),
+            cols: [value].into_iter().collect(),
         }
     }
 }
@@ -221,14 +220,21 @@ struct RowGenerator {
 
 impl RowGenerator {
     fn new(rng: &mut SmallRng, spec: &DataSpec, dup_factor: usize) -> Self {
+        // get columns from the spec:
         let mut columns: Vec<ColumnSpec> = spec.columns.iter().cloned().collect();
+        // sort them from low to high cardinality:
         columns.sort_unstable_by(|a, b| a.cardinality.cmp(&b.cardinality));
+        // generate the list of values for each column, as ColGenerators:
         let values = columns
             .iter()
             .map(|c| {
+                // the cardinality comes from a monotonically increasing u32:
                 let mut v = c.gen_cardinality_range();
+                // used for formatting the cardinality number below:
                 let width = ((c.cardinality - 1).checked_ilog10().unwrap_or(0) + 1) as usize;
+                // inject some randomness:
                 v.shuffle(rng);
+                // map the list of u32s to a list of ColGenerators:
                 v.into_iter()
                     .map(|i| match &c.base {
                         Some(base) => format!("{base}{i:0>width$}"),
@@ -238,15 +244,25 @@ impl RowGenerator {
                     .collect()
             })
             .collect::<Vec<Vec<ColGenerator>>>();
+        // collect the ColGenerators from a list of lists into a tree:
         let mut iter = values.into_iter().zip(columns).rev().peekable();
         let cols = loop {
             let next = iter.next();
             match (iter.peek_mut(), next) {
-                (Some(low), Some(mut high)) => {
-                    let chunk_size = (high.1.cardinality / low.1.cardinality) as usize;
-                    for l in low.0.iter_mut() {
-                        l.children = Some(high.0.drain(0..chunk_size.min(high.0.len())).collect());
-                        l.sort_children();
+                (Some((sink, a_spec)), Some((mut source, b_spec))) => {
+                    let num_children = (b_spec.cardinality / a_spec.cardinality) as usize;
+                    // cardinalities do not always divide evenly, so the 'outer
+                    // loop will do another pass and clean up the remaining
+                    // elements of the higher cardinality column
+                    'outer: while !source.is_empty() {
+                        for sink_col in sink.iter_mut() {
+                            let children = sink_col.children.get_or_insert_with(Default::default);
+                            children.extend(source.drain(0..num_children.min(source.len())));
+                            sink_col.sort_children();
+                            if source.is_empty() {
+                                break 'outer;
+                            }
+                        }
                     }
                 }
                 (None, Some(mut last)) => {
@@ -263,24 +279,27 @@ impl RowGenerator {
         }
     }
 
-    fn generate(&mut self) -> Option<Row> {
-        match self.cols[self.current].generate() {
-            Some(v) => Some(v.into()),
-            None => {
-                self.current += 1;
-                if self.current == self.cols.len() {
-                    self.current = 0;
-                    None
-                } else {
-                    self.cols[self.current].generate().map(Into::into)
-                }
+    fn generate(&mut self) -> Row {
+        loop {
+            if self.cols.is_empty() {
+                panic!("no columns in row generator!");
+            }
+            if self.current == self.cols.len() {
+                self.current = 0;
+            }
+            match self.cols[self.current].generate() {
+                Generated::Leaf(v) => return v.into(),
+                Generated::Branch(vals) => return vals.into(),
+                Generated::Continue => continue,
+                Generated::Done => self.current += 1,
             }
         }
     }
 
     fn generate_record_batch(&mut self, max: usize) -> RecordBatch {
         let mut rows = Vec::new();
-        'outer: while let Some(row) = self.generate() {
+        'outer: while rows.len() < max {
+            let row = self.generate();
             for _ in 0..self.dup_factor {
                 rows.push(row.clone());
                 if rows.len() >= max {
@@ -323,29 +342,28 @@ impl ColGenerator {
         }
     }
 
-    fn generate(&mut self) -> Option<VecDeque<Rc<str>>> {
+    fn generate(&mut self) -> Generated {
         if let Some(ref mut children) = self.children {
             if self.current == children.len() {
                 self.current = 0;
-                return None;
+                return Generated::Done;
             }
             match children[self.current].generate() {
-                Some(vals) => {
+                Generated::Leaf(v) => {
                     self.current += 1;
-                    return Some([self.value.clone()].into_iter().chain(vals).collect());
+                    Generated::Branch([self.value.clone(), v].into_iter().collect())
                 }
-                None => {
+                Generated::Branch(vals) => {
+                    Generated::Branch([self.value.clone()].into_iter().chain(vals).collect())
+                }
+                Generated::Done => {
                     self.current += 1;
-                    if self.current == children.len() {
-                        self.current = 0;
-                        return None;
-                    }
-                    let vals = children[self.current].generate()?;
-                    Some([self.value.clone()].into_iter().chain(vals).collect())
+                    Generated::Continue
                 }
+                Generated::Continue => Generated::Continue,
             }
         } else {
-            Some([self.value.clone()].into_iter().collect())
+            Generated::Leaf(self.value.clone())
         }
     }
 
@@ -357,4 +375,11 @@ impl ColGenerator {
             .map(|c| c.depth())
             .unwrap_or(0)
     }
+}
+
+enum Generated {
+    Leaf(Rc<str>),
+    Branch(Vec<Rc<str>>),
+    Continue,
+    Done,
 }

@@ -29,32 +29,55 @@ Options:
 
 ```
 
-A spec file can be defined, and passed using the `--spec` argument, but the [default](default-spec.toml) will be used if none is provided:
-```toml
-# Defined columns in the columns list:
-[[columns]]
-# each column needs a unique name:
-name = "t0"
-# each column needs a cardinality
-cardinality = 100 
-# an optional base can be provided, so values produced in this column
-# take the form, "first-00", "first-01", ..., up to "first-99"
-base = "first-"
+A spec file can be defined, and passed using the `--spec` argument.
+See [`default-spec.toml`](default-spec.toml) for an example.
 
-[[columns]]
-name = "t1"
-cardinality = 10000
-base = "second-"
+## Example
 
-[[columns]]
-name = "t2"
-# write with a bloom filter on this column
-bloom_filter = {
-  # specify the false positive probability
-  fpp = 0.1,
-  # specify the nubmer of distinct values for the filter:
-  ndv = 100000
-}
-cardinality = 1000000
-base = "third-"
+Running the command
 ```
+parquet-gen -s sample.toml -o sample/ -r 16 -d 2
+```
+
+Where `sample.toml` contains the following:
+```toml
+[[columns]]
+name = "region"
+cardinality = 2
+base = "us-"
+
+[[columns]]
+name = "host"
+cardinality = 4
+base = "prod-"
+
+[[columns]]
+name = "container_id"
+cardinality = 8
+base = "id-"
+```
+
+Would produce a parquet file with data arranged like so:
+```
++--------+--------+--------------+
+| region | host   | container_id |
++--------+--------+--------------+
+| us-0   | prod-1 | id-2         |
+| us-0   | prod-1 | id-2         |
+| us-0   | prod-1 | id-4         |
+| us-0   | prod-1 | id-4         |
+| us-0   | prod-2 | id-3         |
+| us-0   | prod-2 | id-3         |
+| us-0   | prod-2 | id-7         |
+| us-0   | prod-2 | id-7         |
+| us-1   | prod-0 | id-1         |
+| us-1   | prod-0 | id-1         |
+| us-1   | prod-0 | id-5         |
+| us-1   | prod-0 | id-5         |
+| us-1   | prod-3 | id-0         |
+| us-1   | prod-3 | id-0         |
+| us-1   | prod-3 | id-6         |
+| us-1   | prod-3 | id-6         |
++--------+--------+--------------+
+```
+
