@@ -3,7 +3,7 @@
 # each column needs a unique name:
 name = "t0"
 # each column needs a cardinality
-cardinality = 100 
+cardinality = 100
 # an optional base can be provided, so values produced in this column
 # take the form, "first-00", "first-01", ..., up to "first-99"
 base = "first-"
@@ -15,12 +15,10 @@ base = "second-"
 
 [[columns]]
 name = "t2"
+
 # write with a bloom filter on this column
-bloom_filter = {
-  # specify the false positive probability
-  fpp = 0.1,
-  # specify the nubmer of distinct values for the filter:
-  ndv = 100000
-}
+# fpp=specify the false positive probability
+# ndv=specify the nubmer of distinct values for the filter:
+bloom_filter = { fpp = 0.1, ndv = 100000 }
 cardinality = 1000000
 base = "third-"
