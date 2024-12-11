@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-arrow = "51.0.0"
-clap = { version = "4.5.4", features = ["derive"] }
-parquet = "51.0.0"
+arrow = "53.3.0"
+clap = { version = "4.5.23", features = ["derive"] }
+parquet = "53.3.0"
 rand = { version = "0.8.5", features = ["small_rng"] }
-serde = { version = "1.0.198", features = ["derive"] }
-toml = "0.8.12"
+serde = { version = "1.0.216", features = ["derive"] }
+toml = "0.8.19"
