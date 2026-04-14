@@ -9,6 +9,6 @@ edition = "2021"
 arrow = "53.3.0"
 clap = { version = "4.5.23", features = ["derive"] }
 parquet = "53.3.0"
-rand = { version = "0.8.5", features = ["small_rng"] }
+rand = { version = "0.9.3", features = ["small_rng"] }
 serde = { version = "1.0.216", features = ["derive"] }
 toml = "0.8.19"
